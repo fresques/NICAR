@@ -1,0 +1,239 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+##### NICAR 2018
+##### Hannah Fresques 
+
+```{r message=FALSE}
+library(dplyr)
+library(ggplot2)
+library(datasets)
+library(nlme)
+library(tidyr)
+library(tibble)
+library(broom)
+```
+
+#### Regression
+
+Many of the most fascinating questions we ask as journalists are about the relationships between different variables. Regression is the art and the science of finding relationships in the way two or more variables interact.
+
+  Let's start by familiarizing ourselves with the data.
+
+```{r}
+?bdf
+View(bdf)
+```
+
+In this data there is one row per student, which includes both characteristics of the student and her school, and test scores.
+
+Let's plot the relationship between the verbal IQ variable and the language test score.
+
+```{r}
+a <- ggplot(bdf,aes(IQ.verb,langPOST))
+a + geom_point()
+```
+
+This is known as a scatterplot. Each circle on the chart represents a student who appears in the data. The horizontal x-axis represents the student's socioeconomic status score (a higher score indicates higher status). The vertical y-axis represents the student's language test score.
+
+It's clearly not perfect, but there does appear to be a discernible pattern here where as a student's verbal IQ increases her language test score tends to go up.
+
+Linear regression is asking R to do the best job it can finding a line that predicts y for a given value of x. 
+
+Let's do that visually first.
+
+
+```{r}
+a + geom_point() + geom_smooth(method="lm")
+```
+
+The line is the result of R doing the best job it can generalizing the relationship between the two variables we've put in. (For a more technical description of this, go [here](https://en.wikipedia.org/wiki/Ordinary_least_squares).
+
+What we can see here is that the relationship between the two variables is _positive_. That means that as IQ score goes up, language test score goes up as well. But even better than knowing that would be putting a number on that increase. To do that, we need to have R generate an actual equation for us.
+
+You may remember back to middle school. The change in Y per an increase in X is called the _slope_ of the line. Sometimes it's also called _rise over run_. The formula is:
+
+$y=mx+b$
+
+If none of this sounds familiar to you, that's okay too.
+
+Let's have R generate our equation using the 'lm' function, which stands for linear model.
+```{r}
+IQ_model <- lm(langPOST~IQ.verb,bdf)
+summary(IQ_model)
+```
+
+The value in linear regression output that expresses the _amount_ of change associated with an explainer variable is called a 'coefficient'. In a linear regression, the __coefficient__ is in the same units as the variables themselves.
+
+So, in this case, a one-point increase in verbal IQ score is associated with a 2.65 point increase in test score. A finding!
+
+Before we go nuts, though, we also want to look at a couple of other pieces of information from the regression output.
+
+The $Pr(>|t|)$ value tells us whether the increase or decrease described in the coefficient is statistically significant. The level of significance expresses our confidence in our result. If a coefficient is not statistically significant, it means we can't rule out that the effect we're seeing is due to chance. Statistically insignificant doesn't necessarily mean no effect. It often just means there is not enough data to draw a strong conclusion.
+
+The standard level of significance is 95%, which means we want a $Pr(>|t|)$ value of less than .05.  In case that's hard to remember, R also has a star rating system indicating significance. If you have one or more $*$ next to your coefficient's p-value, your result is significant at the 95% level.
+
+The final value worth checking out is the __Adjusted R-squared__. This is a value between 0 and 1 that expresses, simply put, how much of the variation we see in Y is explained by X. An R-squared value of 1 would mean that we can perfectly predict a child's test score based on their measured IQ. An R-Squared value of 0 means that the variables in our model overall don't explain any of the variation we see in test scores.
+
+There is always much discussion about what a "good" R-squared value is. In general, higher is better, but a result can still be interesting even if the R-squared is modest, especially if the relationship is unexpected in some way. E.g. Prayer has been shown to marginally improve life-expectancy after cancer diagnosis. Clearly prayer is not the most explanatory factor, but the fact that it has any effect at all is interesting.
+
+Let's try another one:
+
+```{r}
+a <- ggplot(bdf,aes(meetings,langPOST))
+a + geom_point()
+```
+
+The expectation would be that the more attention a student gets from educators, the greater her test scores. Let's find out if this is the case.
+
+```{r}
+a + geom_point() + geom_smooth(method="lm")
+```
+
+Meetings don't seem to have any effect at all. Perhaps we need to refine our approach. Let's draw separate lines for minority and non-minority students.
+
+```{r}
+a <- ggplot(bdf,aes(meetings,langPOST,color=Minority))
+a + geom_point() + geom_smooth(method="lm") + facet_wrap(~Minority)
+```
+
+It suggests that while intervention in the form of meetings has little to no effect for non-minority students, but in the Dutch school system, it translates to higher test scores. Let's filter our data and run a linear regression on just our minority students.
+
+```{r}
+minority_scores <- bdf %>% filter(Minority=='Y')
+min_meeting_model <- lm(langPOST~meetings,minority_scores)
+summary(min_meeting_model)
+```
+
+Hey class: what can we learn from this regression output? What might we want to be wary of?
+
+#### Multivariate regression
+So far, we've limited ourselves to one variable at a time. But _why?_
+
+We can put in more than one (although at the point we can't really keep visualizing easily.)
+
+The convention for this in R is :
+
+outcome ~ explainer variable1 + explainer variable2 + ...+ explainer variableN
+
+```{r}
+multi_model <- lm(langPOST~meetings+ses+IQ.verb+homework,minority_scores)
+summary(multi_model)
+```
+
+Let's look at this output.
+
+You'll notice that each variable we included in the model has its own coefficient. Which ones are large and which are small? Which are statistically significant? What happened to our R-squared value?
+
+_How do I decide what to include?_
+
+It may be tempting to just throw in everything. Don't! Generally accepted best practice is to carefully choose a handful of variables. Experts might use their own subject knowledge or other research to inform their decisions. As journalists, it's a great idea to use reporting (including talking to experts) to decide. 
+
+#### Logistic regression
+Until now we've been predicting a variable that is continuous. A score can be many different values. But often we find ourselves wanting to model an up-or-down outcome like, death, graduation, a guilty verdict, getting hired for a job. These are all variables with only two values, yes and no.
+
+Not to worry - this is what logistic regression can do for us.
+
+Let's use a dataset about the fates of passengers on the Titanic.
+
+```{r}
+?Titanic
+View(Titanic)
+titan <- data.frame(Titanic)
+```
+
+View(titan)
+
+You may notice there's something very different about this dataset. Our school data had one row for each student. This table is aggregated like a giant pivot table or cross-tab. For example, if you look at the top few rows of the table, you'll see that 0 first-class male children died, but 35 3rd-class male children died.
+
+This kind of data is a bit counter intuitive and can be a bit unwieldy to work with, so let's do ourselves a favor and expand it back out to one row per person.
+
+```{r}
+# drop all the rows with a frequency of 0
+titan <- titan %>% filter(Freq != 0)
+# replicate each line as many times as the "Freq" column calls for
+# also, drop the "Freq" column
+titan_long <- titan[,c(1,2,3,4)][rep(seq_len(dim(titan)[1]), titan$Freq),]
+# confirm that we now have a row for every passenger, which matches the sum of "Freq"
+print(c(nrow(titan_long), sum(titan$Freq)))
+View(titan_long)
+```
+
+Much better!
+
+When the Titanic sank, allegedly passengers were evacuated "women and children first."
+Was this actually the case?
+
+First let's look to see if children did in fact die at a lower rate than adults.
+
+```{r}
+kids <- titan_long %>% group_by(Age,Survived) %>% count()
+spread(kids,Age,n)
+```
+
+The death rate for kids will be the kids who died divided by total number of kids:
+```{r}
+52/(57+52)
+```
+The death rate for adults:
+```{r}
+1438/(654+1438)
+```
+
+If want to know the _relative_ death rates of children and adults, we need to calculate something called a risk ratio. Here we do that by dividing the child death rate by the adult death rate.
+
+```{r}
+.48/.69
+```
+
+We can describe this result by saying that Children were about 30% less likely to die than adults.
+
+So far so good, but we are only looking at part of the picture. To include more variables, we will need to run a logistic regression. First let's recode the Survived variable.
+
+```{r}
+titan_long <- titan_long %>% mutate(died=ifelse(Survived=="No",1,0))
+```
+
+
+
+The syntax is not dissimilar from the linear model syntax above:
+
+```{r}
+titanic_model <- glm(
+    died ~ Class + Sex + Age,
+    data = titan_long,
+    family = 'binomial'
+)
+summary(titanic_model)
+```
+
+As before, we look at the coefficients. But this time, they are not in the same units as what we're trying to predict. They are in something called log-odds. Under certain circumstances, we can interpret them as reduced or increased likelihood of the event we're trying to predict relative to a reference category.
+
+For example, we have coefficients for Class2nd and Class3rd, but not Class1st. The -1.02 coefficient means that the log-odds are relative to first class passengers. We also want to express our result in odds and not log-odds (that's confusing).
+
+Let's work through an example. The log-odds of dying for a 3rd-class passenger relative to a 1st-class passenger, controlling for passenger sex and age, are:
+
+```{r}
+exp(1.7778)
+```
+
+So the odds of dying for a poor passenger were almost 6 times the odds of dying for a well-to-do passenger.
+
+Now let's look at the gap between adults and children:
+```{r}
+exp(1.0615)
+```
+
+The odds of an adult dying were nearly three times that of a child dying.
+
+The R star-rating system holds true here as well - if a coefficient has at least one star, you've met the 95% confidence level requirement for statistical significance.
+
+The VERY IMPORTANT catch: If the underlying rate of the thing you're trying to predict is greater than 10%, or you have an odds ratio of >2 or <.5 you __cannot__ treat odds like risk. You'll need to make sure you use the right terminology and even better -- convert your odds ratios to risk ratios.
+
+
+
+
+
+
+
