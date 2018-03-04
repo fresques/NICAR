@@ -8,36 +8,38 @@ output: html_notebook
 ```{r message=FALSE}
 library(dplyr)
 library(ggplot2)
-library(datasets)
-library(nlme)
+library(readr)
+
 library(tidyr)
+library(nlme)
 library(tibble)
 library(broom)
+
 ```
 
 #### Regression
 
 Many of the most fascinating questions we ask as journalists are about the relationships between different variables. Regression is the art and the science of finding relationships in the way two or more variables interact.
 
-  Let's start by familiarizing ourselves with the data.
+Let's start by familiarizing ourselves with the data.
 
 ```{r}
-?bdf
-View(bdf)
+schools <- read_rds("data/schools.rds")
+schools %>% head(30) %>% View()
 ```
 
-In this data there is one row per student, which includes both characteristics of the student and her school, and test scores.
+In this data there is one row per Illinois school, which includes characteristics of the school and PARCC test proficiency rates. (The data is from [here](https://www.isbe.net/pages/illinois-state-report-card-data.aspx))
 
 Let's plot the relationship between the verbal IQ variable and the language test score.
 
 ```{r}
-a <- ggplot(bdf,aes(IQ.verb,langPOST))
+a <- ggplot(schools,aes(pctLowInc,PARCCpct))
 a + geom_point()
 ```
 
-This is known as a scatterplot. Each circle on the chart represents a student who appears in the data. The horizontal x-axis represents the student's socioeconomic status score (a higher score indicates higher status). The vertical y-axis represents the student's language test score.
+This is known as a scatterplot. Each circle on the chart represents a school that appears in the data. The horizontal x-axis represents the percent of low income students at the school. The vertical y-axis represents the percent of students who were demed proficient on the PARCC test.
 
-It's clearly not perfect, but there does appear to be a discernible pattern here where as a student's verbal IQ increases her language test score tends to go up.
+It's clearly not perfect, but there does appear to be a discernible pattern here where as a school has more low income students, their proficiency rate tends to go down.
 
 Linear regression is asking R to do the best job it can finding a line that predicts y for a given value of x. 
 
@@ -50,7 +52,7 @@ a + geom_point() + geom_smooth(method="lm")
 
 The line is the result of R doing the best job it can generalizing the relationship between the two variables we've put in. (For a more technical description of this, go [here](https://en.wikipedia.org/wiki/Ordinary_least_squares).
 
-What we can see here is that the relationship between the two variables is _positive_. That means that as IQ score goes up, language test score goes up as well. But even better than knowing that would be putting a number on that increase. To do that, we need to have R generate an actual equation for us.
+What we can see here is that the relationship between the two variables is _negative_. That means that as the percent of low income students  goes up, proficiency rates go down. But even better than knowing that would be putting a number on that increase. To do that, we need to have R generate an actual equation for us.
 
 You may remember back to middle school. The change in Y per an increase in X is called the _slope_ of the line. Sometimes it's also called _rise over run_. The formula is:
 
@@ -60,13 +62,13 @@ If none of this sounds familiar to you, that's okay too.
 
 Let's have R generate our equation using the 'lm' function, which stands for linear model.
 ```{r}
-IQ_model <- lm(langPOST~IQ.verb,bdf)
-summary(IQ_model)
+inc_model <- lm(PARCCpct~pctLowInc, schools)
+summary(inc_model)
 ```
 
 The value in linear regression output that expresses the _amount_ of change associated with an explainer variable is called a 'coefficient'. In a linear regression, the __coefficient__ is in the same units as the variables themselves.
 
-So, in this case, a one-point increase in verbal IQ score is associated with a 2.65 point increase in test score. A finding!
+So, in this case, a one-percentage-point increase in low income students is associated with a 0.47 point decrease in proficiency rates. A finding!
 
 Before we go nuts, though, we also want to look at a couple of other pieces of information from the regression output.
 
@@ -81,21 +83,25 @@ There is always much discussion about what a "good" R-squared value is. In gener
 Let's try another one:
 
 ```{r}
-a <- ggplot(bdf,aes(meetings,langPOST))
-a + geom_point()
+b <- ggplot(schools,aes(pctBlack,PARCCpct))
+b + geom_point()
 ```
 
-The expectation would be that the more attention a student gets from educators, the greater her test scores. Let's find out if this is the case.
+Knowing what we know about American education, the expectation would be that the more black students attend a school, the lower the proficiency rate at the school. Let's find out if this is the case.
 
 ```{r}
-a + geom_point() + geom_smooth(method="lm")
+b + geom_point() + geom_smooth(method="lm")
 ```
+
+TKTK EDITS NEEDED HERE.
 
 Meetings don't seem to have any effect at all. Perhaps we need to refine our approach. Let's draw separate lines for minority and non-minority students.
 
 ```{r}
-a <- ggplot(bdf,aes(meetings,langPOST,color=Minority))
-a + geom_point() + geom_smooth(method="lm") + facet_wrap(~Minority)
+c <- ggplot(schools,aes(pctBlack,pctLowInc))
+c + geom_point() + geom_smooth(method="lm")
+# a <- ggplot(bdf,aes(meetings,langPOST,color=Minority))
+# a + geom_point() + geom_smooth(method="lm") + facet_wrap(~Minority)
 ```
 
 It suggests that while intervention in the form of meetings has little to no effect for non-minority students, but in the Dutch school system, it translates to higher test scores. Let's filter our data and run a linear regression on just our minority students.
@@ -118,7 +124,7 @@ The convention for this in R is :
 outcome ~ explainer variable1 + explainer variable2 + ...+ explainer variableN
 
 ```{r}
-multi_model <- lm(langPOST~meetings+ses+IQ.verb+homework,minority_scores)
+multi_model <- lm(PARCCpct~pctBlack+pctLowInc, schools)
 summary(multi_model)
 ```
 
@@ -135,77 +141,42 @@ Until now we've been predicting a variable that is continuous. A score can be ma
 
 Not to worry - this is what logistic regression can do for us.
 
-Let's use a dataset about the fates of passengers on the Titanic.
+What if we were instead interested in schools that met a certain proficency benchmark, say schools that did better than the state average.
+
+First let's look to see how Chicago schools did compared to the rest of the state.
 
 ```{r}
-?Titanic
-View(Titanic)
-titan <- data.frame(Titanic)
+schools %>% filter(is.na(didWell)==F) %>% count(CHI,didWell)  
 ```
 
-View(titan)
+The pass rate for Chicago schools will be the schools that met our criteria divided by the total number of schools.
+```{r}
+109/(109+384)
+```
+The pass rate for non-Chicago schools:
+```{r}
+1221/(1221+1271)
+```
 
-You may notice there's something very different about this dataset. Our school data had one row for each student. This table is aggregated like a giant pivot table or cross-tab. For example, if you look at the top few rows of the table, you'll see that 0 first-class male children died, but 35 3rd-class male children died.
-
-This kind of data is a bit counter intuitive and can be a bit unwieldy to work with, so let's do ourselves a favor and expand it back out to one row per person.
+If want to know the _relative_ pass rates of Chicago and non-Chicago schools, we need to calculate something called a risk ratio. Here we do that by dividing the Chicago pass rate by the non-Chicago pass rate.
 
 ```{r}
-# drop all the rows with a frequency of 0
-titan <- titan %>% filter(Freq != 0)
-# replicate each line as many times as the "Freq" column calls for
-# also, drop the "Freq" column
-titan_long <- titan[,c(1,2,3,4)][rep(seq_len(dim(titan)[1]), titan$Freq),]
-# confirm that we now have a row for every passenger, which matches the sum of "Freq"
-print(c(nrow(titan_long), sum(titan$Freq)))
-View(titan_long)
+.22/.49
 ```
 
-Much better!
+We can describe this result by saying that Chicago schools were about 30% less likely to die than adults.
 
-When the Titanic sank, allegedly passengers were evacuated "women and children first."
-Was this actually the case?
-
-First let's look to see if children did in fact die at a lower rate than adults.
-
-```{r}
-kids <- titan_long %>% group_by(Age,Survived) %>% count()
-spread(kids,Age,n)
-```
-
-The death rate for kids will be the kids who died divided by total number of kids:
-```{r}
-52/(57+52)
-```
-The death rate for adults:
-```{r}
-1438/(654+1438)
-```
-
-If want to know the _relative_ death rates of children and adults, we need to calculate something called a risk ratio. Here we do that by dividing the child death rate by the adult death rate.
-
-```{r}
-.48/.69
-```
-
-We can describe this result by saying that Children were about 30% less likely to die than adults.
-
-So far so good, but we are only looking at part of the picture. To include more variables, we will need to run a logistic regression. First let's recode the Survived variable.
-
-```{r}
-titan_long <- titan_long %>% mutate(died=ifelse(Survived=="No",1,0))
-```
-
-
+So far so good, but we are only looking at part of the picture. To include more variables, we will need to run a logistic regression. 
 
 The syntax is not dissimilar from the linear model syntax above:
 
 ```{r}
-titanic_model <- glm(
-    died ~ Class + Sex + Age,
-    data = titan_long,
+logistic_model <- glm(
+    didWell ~ CHI + pctBlack + pctLowInc + type,
+    data = schools,
     family = 'binomial'
 )
-summary(titanic_model)
+summary(logistic_model)
 ```
 
 As before, we look at the coefficients. But this time, they are not in the same units as what we're trying to predict. They are in something called log-odds. Under certain circumstances, we can interpret them as reduced or increased likelihood of the event we're trying to predict relative to a reference category.
@@ -215,7 +186,9 @@ For example, we have coefficients for Class2nd and Class3rd, but not Class1st. T
 Let's work through an example. The log-odds of dying for a 3rd-class passenger relative to a 1st-class passenger, controlling for passenger sex and age, are:
 
 ```{r}
-exp(1.7778)
+# exp(1.7778)
+logistic_model %>% tidy() %>% filter(term=="CHITRUE") %>% select(estimate)
+logistic_model %>% tidy() %>% filter(term=="CHITRUE") %>% select(estimate) %>% exp()
 ```
 
 So the odds of dying for a poor passenger were almost 6 times the odds of dying for a well-to-do passenger.
@@ -229,7 +202,7 @@ The odds of an adult dying were nearly three times that of a child dying.
 
 The R star-rating system holds true here as well - if a coefficient has at least one star, you've met the 95% confidence level requirement for statistical significance.
 
-The VERY IMPORTANT catch: If the underlying rate of the thing you're trying to predict is greater than 10%, or you have an odds ratio of >2 or <.5 you __cannot__ treat odds like risk. You'll need to make sure you use the right terminology and even better -- convert your odds ratios to risk ratios.
+The VERY IMPORTANT catch: You cannot treat odds like risk. They are not the same thing. You need to make sure you use the right terminology when you talk about your results. You can convert odds to risk for certain parameters in your model, but that's beyond the scope of this presentation, and comes with its own set of cavieats.
 
 
 

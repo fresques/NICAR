@@ -31,3 +31,8 @@ vignettes/*.pdf
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+
+# ignore large raw datasets
+rc17.txt
+rc17_assessment.txt
+RC17_layout.xlsx
