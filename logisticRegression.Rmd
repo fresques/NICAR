@@ -24,16 +24,22 @@ Many of the most fascinating questions we ask as journalists are about the relat
 Let's start by familiarizing ourselves with the data.
 
 ```{r}
-schools <- read_rds("data/schools.rds")
+schools <- read_rds("data/schools.rds") # 3796
+schools <- schools %>% na.omit() %>% filter(type!="HIGH SCHOOL")# 2892
 schools %>% head(30) %>% View()
+schools %>% count(type)
+schools %>% count(CHI)
+schools %>% filter(CHI) %>% count(city,county)
+schools %>% group_by(didWell) %>% summarize(min=min(PARCCpct), max=max(PARCCpct))
+schools %>% select(contains("pct"),enrollment) %>% summary()
 ```
 
-In this data there is one row per Illinois school, which includes characteristics of the school and PARCC test proficiency rates. (The data is from [here](https://www.isbe.net/pages/illinois-state-report-card-data.aspx))
+In this data there is one row per Illinois school, which includes characteristics of the school and PARCC test proficiency rates. (The data is from [here](https://www.isbe.net/pages/illinois-state-report-card-data.aspx)). The PARCC is administered to students in 3rd-8th grades.
 
-Let's plot the relationship between the verbal IQ variable and the language test score.
+Let's plot the relationship between the percent low income variable and the percent of students who get a proficient score on the PARCC.
 
 ```{r}
-a <- ggplot(schools,aes(pctLowInc,PARCCpct))
+a <- ggplot(schools,aes(x=pctLowInc,y=PARCCpct))
 a + geom_point()
 ```
 
@@ -47,12 +53,12 @@ Let's do that visually first.
 
 
 ```{r}
-a + geom_point() + geom_smooth(method="lm")
+a + geom_point() + geom_smooth(method="lm", se=FALSE)
 ```
 
 The line is the result of R doing the best job it can generalizing the relationship between the two variables we've put in. (For a more technical description of this, go [here](https://en.wikipedia.org/wiki/Ordinary_least_squares).
 
-What we can see here is that the relationship between the two variables is _negative_. That means that as the percent of low income students  goes up, proficiency rates go down. But even better than knowing that would be putting a number on that increase. To do that, we need to have R generate an actual equation for us.
+What we can see here is that the relationship between the two variables is _negative_. That means that as the percent of low income students  goes up, proficiency rates go down. But even better than knowing that would be putting a number on that decrease. To do that, we need to have R generate an actual equation for us.
 
 You may remember back to middle school. The change in Y per an increase in X is called the _slope_ of the line. Sometimes it's also called _rise over run_. The formula is:
 
@@ -68,40 +74,39 @@ summary(inc_model)
 
 The value in linear regression output that expresses the _amount_ of change associated with an explainer variable is called a 'coefficient'. In a linear regression, the __coefficient__ is in the same units as the variables themselves.
 
-So, in this case, a one-percentage-point increase in low income students is associated with a 0.47 point decrease in proficiency rates. A finding!
+So, in this case, a one-percentage-point increase in low income students is associated with a 0.47 percentage point decrease in proficiency rates. A finding!
 
 Before we go nuts, though, we also want to look at a couple of other pieces of information from the regression output.
 
-The $Pr(>|t|)$ value tells us whether the increase or decrease described in the coefficient is statistically significant. The level of significance expresses our confidence in our result. If a coefficient is not statistically significant, it means we can't rule out that the effect we're seeing is due to chance. Statistically insignificant doesn't necessarily mean no effect. It often just means there is not enough data to draw a strong conclusion.
+The $Pr(>|t|)$ value tells us whether the increase or decrease described in the coefficient is statistically significant. The level of significance expresses our confidence in our result. If a coefficient is not statistically significant, it means we can't rule out that the effect we're seeing is due to chance. Statistically insignificant doesn't necessarily mean no effect. It often just means there is not enough data to draw a strong conclusion. And statistically significant doesn't necessarily mean you have an interesting effect. With a lot of data, a very small coefficient may be statistically significant. It's up to you to decide if the coefficient is meaningfully large.
 
 The standard level of significance is 95%, which means we want a $Pr(>|t|)$ value of less than .05.  In case that's hard to remember, R also has a star rating system indicating significance. If you have one or more $*$ next to your coefficient's p-value, your result is significant at the 95% level.
 
-The final value worth checking out is the __Adjusted R-squared__. This is a value between 0 and 1 that expresses, simply put, how much of the variation we see in Y is explained by X. An R-squared value of 1 would mean that we can perfectly predict a child's test score based on their measured IQ. An R-Squared value of 0 means that the variables in our model overall don't explain any of the variation we see in test scores.
+The final value worth checking out is the __Adjusted R-squared__. This is a value between 0 and 1 that expresses, simply put, how much of the variation we see in Y is explained by X. An R-squared value of 1 would mean that we can perfectly predict a school's PARCC proficiency based on the percent of low income students at the school. An R-Squared value of 0 means that the variables in our model overall don't explain any of the variation we see in test scores.
 
 There is always much discussion about what a "good" R-squared value is. In general, higher is better, but a result can still be interesting even if the R-squared is modest, especially if the relationship is unexpected in some way. E.g. Prayer has been shown to marginally improve life-expectancy after cancer diagnosis. Clearly prayer is not the most explanatory factor, but the fact that it has any effect at all is interesting.
 
 Let's try another one:
 
-```{r}
-b <- ggplot(schools,aes(pctBlack,PARCCpct))
-b + geom_point()
-```
-
 Knowing what we know about American education, the expectation would be that the more black students attend a school, the lower the proficiency rate at the school. Let's find out if this is the case.
 
 ```{r}
-b + geom_point() + geom_smooth(method="lm")
+b <- ggplot(schools,aes(x=pctBlack,y=PARCCpct))
+b + geom_point() + geom_smooth(method="lm", se=FALSE)
 ```
+
 
 TKTK EDITS NEEDED HERE.
 
 Meetings don't seem to have any effect at all. Perhaps we need to refine our approach. Let's draw separate lines for minority and non-minority students.
 
 ```{r}
-c <- ggplot(schools,aes(pctBlack,pctLowInc))
+c <- ggplot(schools,aes(x=pctBlack,y=pctLowInc))
 c + geom_point() + geom_smooth(method="lm")
 # a <- ggplot(bdf,aes(meetings,langPOST,color=Minority))
 # a + geom_point() + geom_smooth(method="lm") + facet_wrap(~Minority)
+c <- ggplot(schools,aes(x=pctBlack,y=PARCCpct))
+c + geom_point() + geom_smooth(method="lm", se=FALSE) + facet_wrap(~type)
 ```
 
 It suggests that while intervention in the form of meetings has little to no effect for non-minority students, but in the Dutch school system, it translates to higher test scores. Let's filter our data and run a linear regression on just our minority students.
