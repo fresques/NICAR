@@ -54,12 +54,12 @@ schools <- desc %>%
   )
 # has 3796 rows, same number as the assm and desc tables. good.
 
+# cleanup <- function(x){as.numeric(str_replace_all(test,"[^0-9]",""))}
 
 schools <- schools %>% 
   # make some columns numeric
   mutate_at(
-    c("enrollment", 
-      "pctWhite", "pctBlack", "pctHisp", "pctAsian", "pctPCISL", "pctNativ", "pctMulti",
+    c("pctWhite", "pctBlack", "pctHisp", "pctAsian", "pctPCISL", "pctNativ", "pctMulti",
       "pctLowInc","PARCCpct"),
     funs(as.numeric)
   ) %>%
@@ -71,7 +71,7 @@ schools <- schools %>%
   ) %>% 
   # reorder columns
   select(
-    id, nameSCH, nameDIST, city, county, CHI, type, enrollment, 
+    id, nameSCH, nameDIST, city, county, CHI, type, 
     pctWhite, pctBlack, pctHisp, pctAsian, pctPCISL, pctNativ, pctMulti, 
     pctLowInc,  
     PARCCpct, didWell
