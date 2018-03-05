@@ -1,20 +1,16 @@
 ---
-title: "R Notebook"
+title: "Logistic Regression"
 output: html_notebook
 ---
-##### NICAR 2018
+##### NICAR 2018, Chicago Illinois
 ##### Hannah Fresques 
 
 ```{r message=FALSE}
 library(dplyr)
 library(ggplot2)
 library(readr)
-
-library(tidyr)
-library(nlme)
-library(tibble)
 library(broom)
-
+library(stringr)
 ```
 
 #### Regression
@@ -25,13 +21,19 @@ Let's start by familiarizing ourselves with the data.
 
 ```{r}
 schools <- read_rds("data/schools.rds") # 3796
-schools <- schools %>% na.omit() %>% filter(type!="HIGH SCHOOL")# 2892
+schools <- schools %>% na.omit() %>% filter(str_trim(type) %in% c("ELEMENTARY","MIDDLE SCHL")) # 2835
+schools <- schools %>% 
+  mutate(
+    CHI=ifelse(CHI==T,"Chicago","Rest of IL"),
+    CHI=factor(CHI,levels=c("Rest of IL","Chicago")),
+    failed=!(didWell)
+  )
 schools %>% head(30) %>% View()
 schools %>% count(type)
 schools %>% count(CHI)
-schools %>% filter(CHI) %>% count(city,county)
+schools %>% filter(CHI=="Chicago") %>% count(city,county)
 schools %>% group_by(didWell) %>% summarize(min=min(PARCCpct), max=max(PARCCpct))
-schools %>% select(contains("pct"),enrollment) %>% summary()
+schools %>% select(contains("pct")) %>% summary()
 ```
 
 In this data there is one row per Illinois school, which includes characteristics of the school and PARCC test proficiency rates. (The data is from [here](https://www.isbe.net/pages/illinois-state-report-card-data.aspx)). The PARCC is administered to students in 3rd-8th grades.
@@ -43,7 +45,7 @@ a <- ggplot(schools,aes(x=pctLowInc,y=PARCCpct))
 a + geom_point()
 ```
 
-This is known as a scatterplot. Each circle on the chart represents a school that appears in the data. The horizontal x-axis represents the percent of low income students at the school. The vertical y-axis represents the percent of students who were demed proficient on the PARCC test.
+This is known as a scatter plot. Each circle on the chart represents a school that appears in the data. The horizontal x-axis represents the percent of low income students at the school. The vertical y-axis represents the percent of students who were deemed proficient on the PARCC test.
 
 It's clearly not perfect, but there does appear to be a discernible pattern here where as a school has more low income students, their proficiency rate tends to go down.
 
@@ -62,7 +64,8 @@ What we can see here is that the relationship between the two variables is _nega
 
 You may remember back to middle school. The change in Y per an increase in X is called the _slope_ of the line. Sometimes it's also called _rise over run_. The formula is:
 
-$y=mx+b$
+$$y=\beta _{0}+\beta _{1}x$$
+
 
 If none of this sounds familiar to you, that's okay too.
 
@@ -74,7 +77,7 @@ summary(inc_model)
 
 The value in linear regression output that expresses the _amount_ of change associated with an explainer variable is called a 'coefficient'. In a linear regression, the __coefficient__ is in the same units as the variables themselves.
 
-So, in this case, a one-percentage-point increase in low income students is associated with a 0.47 percentage point decrease in proficiency rates. A finding!
+So, in this case, a one-percentage-point increase in low income students is associated with a 0.48 percentage point decrease in proficiency rates. A finding!
 
 Before we go nuts, though, we also want to look at a couple of other pieces of information from the regression output.
 
@@ -88,7 +91,7 @@ There is always much discussion about what a "good" R-squared value is. In gener
 
 Let's try another one:
 
-Knowing what we know about American education, the expectation would be that the more black students attend a school, the lower the proficiency rate at the school. Let's find out if this is the case.
+Is the race of students at a school related to the school's proficiency score? Let's see.
 
 ```{r}
 b <- ggplot(schools,aes(x=pctBlack,y=PARCCpct))
@@ -96,30 +99,43 @@ b + geom_point() + geom_smooth(method="lm", se=FALSE)
 ```
 
 
-TKTK EDITS NEEDED HERE.
+Schools with more black students have lower PARCC proficiency rates.
 
-Meetings don't seem to have any effect at all. Perhaps we need to refine our approach. Let's draw separate lines for minority and non-minority students.
+Seeing this trend, is there anything you want to reconsider in our first linear model?
 
 ```{r}
 c <- ggplot(schools,aes(x=pctBlack,y=pctLowInc))
-c + geom_point() + geom_smooth(method="lm")
-# a <- ggplot(bdf,aes(meetings,langPOST,color=Minority))
-# a + geom_point() + geom_smooth(method="lm") + facet_wrap(~Minority)
-c <- ggplot(schools,aes(x=pctBlack,y=PARCCpct))
-c + geom_point() + geom_smooth(method="lm", se=FALSE) + facet_wrap(~type)
+c + geom_point() + geom_smooth(method="lm", se=FALSE)
 ```
 
-It suggests that while intervention in the form of meetings has little to no effect for non-minority students, but in the Dutch school system, it translates to higher test scores. Let's filter our data and run a linear regression on just our minority students.
+One last one. How do Chicago schools compare to the rest of Illinois?
 
 ```{r}
-minority_scores <- bdf %>% filter(Minority=='Y')
-min_meeting_model <- lm(langPOST~meetings,minority_scores)
-summary(min_meeting_model)
+schools %>% group_by(CHI) %>% summarize(PARCCpct=mean(PARCCpct))
+```
+```{r}
+CHI_model <- lm(PARCCpct~CHI, schools)
+summary(CHI_model)
 ```
 
-Hey class: what can we learn from this regression output? What might we want to be wary of?
+Scores are lower in Chicago.
+
+```{r}
+schools %>% group_by(CHI) %>% summarize(pctBlack=mean(pctBlack))
+```
+
+Chicago schools have more black students than other schools in the state.
+
+
+```{r}
+d <- ggplot(schools,aes(x=pctBlack,y=PARCCpct))
+d + geom_point() + geom_smooth(method="lm", se=FALSE) + facet_wrap(~CHI)
+```
+
+
 
 #### Multivariate regression
+
 So far, we've limited ourselves to one variable at a time. But _why?_
 
 We can put in more than one (although at the point we can't really keep visualizing easily.)
@@ -129,7 +145,7 @@ The convention for this in R is :
 outcome ~ explainer variable1 + explainer variable2 + ...+ explainer variableN
 
 ```{r}
-multi_model <- lm(PARCCpct~pctBlack+pctLowInc, schools)
+multi_model <- lm(PARCCpct~pctBlack+pctLowInc+CHI, schools)
 summary(multi_model)
 ```
 
@@ -141,77 +157,132 @@ _How do I decide what to include?_
 
 It may be tempting to just throw in everything. Don't! Generally accepted best practice is to carefully choose a handful of variables. Experts might use their own subject knowledge or other research to inform their decisions. As journalists, it's a great idea to use reporting (including talking to experts) to decide. 
 
-#### Logistic regression
-Until now we've been predicting a variable that is continuous. A score can be many different values. But often we find ourselves wanting to model an up-or-down outcome like, death, graduation, a guilty verdict, getting hired for a job. These are all variables with only two values, yes and no.
+
+#### Risk and Odds
+
+Until now we've been predicting a variable that is continuous. A percent can be many different values. But often we find ourselves wanting to model an up-or-down outcome like, death, graduation, a guilty verdict, getting hired for a job. These are all variables with only two values, yes and no.
 
 Not to worry - this is what logistic regression can do for us.
 
-What if we were instead interested in schools that met a certain proficency benchmark, say schools that did better than the state average.
+What if we were instead interested in schools that failed to pass a certain proficiency benchmark, say schools that did worse than the state average?
 
 First let's look to see how Chicago schools did compared to the rest of the state.
 
 ```{r}
-schools %>% filter(is.na(didWell)==F) %>% count(CHI,didWell)  
+schools %>% count(CHI,failed)  
 ```
 
-The pass rate for Chicago schools will be the schools that met our criteria divided by the total number of schools.
+The failure rate for Chicago schools will be the schools that were below the benchmark divided by the total number of schools.
 ```{r}
-109/(109+384)
+322/(94+322)
 ```
-The pass rate for non-Chicago schools:
+The failure rate for non-Chicago schools:
 ```{r}
-1221/(1221+1271)
+1215/(1215+1204)
 ```
 
-If want to know the _relative_ pass rates of Chicago and non-Chicago schools, we need to calculate something called a risk ratio. Here we do that by dividing the Chicago pass rate by the non-Chicago pass rate.
+These are measures of *risk*
+
+risk = successes / (successes + failures)
+
+If want to know the _relative_ failure rates of Chicago and non-Chicago schools, we need to calculate something called a risk ratio. Here we do that by dividing the Chicago failure rate by the non-Chicago failure rate.
 
 ```{r}
-.22/.49
+.77/.50
 ```
 
-We can describe this result by saying that Chicago schools were about 30% less likely to die than adults.
+We can describe this result by saying that Chicago schools were about 54% more likely to fail than schools in the rest of the state.
 
 So far so good, but we are only looking at part of the picture. To include more variables, we will need to run a logistic regression. 
 
-The syntax is not dissimilar from the linear model syntax above:
+But first, a detour into the odd world of odds.
+
+Risk, as we saw above, is what we usually use to talk about how often some event happens. But sometimes we use odds instead. They are common in sports and gambling. 
+
+odds = successes / failures
+
+Using the example above, the odds of a Chicago school being below the benchmark is:
+
+```{r}
+322/94
+```
+The odds of failure for non-Chicago schools:
+```{r}
+1215/1204
+```
+
+If want to know the _relative_ odds of Chicago and non-Chicago schools, we calculate an odds ratio. Here we do that by dividing the Chicago odds by the non-Chicago odds.
+
+```{r}
+(322/94)/(1215/1204)
+```
+
+To put this into words: The odds of a Chicago school failing to meet the benchmark are more than three times the odds of failing for a school outside of Chicago.  
+
+You may be wondering why anyone would ever use odds. They are harder to talk about and kind of confusing. One big reason is that the results of logistic regression can only be expressed in odds.
+
+
+
+#### Logistic regression
+
+Logistic regression uses the same principals as linear regression. But it uses a 'link function' to transform the predicted outcome variable from any real number to a number between 0 and 1.
+
+$$y={\frac {1}{1+e^{-(\beta _{0}+\beta _{1}x)}}}$$
+
+To actually run a logistic regression, the syntax is similar to the linear model syntax above:
 
 ```{r}
 logistic_model <- glm(
-    didWell ~ CHI + pctBlack + pctLowInc + type,
+    failed ~ CHI,
     data = schools,
     family = 'binomial'
 )
 summary(logistic_model)
 ```
 
-As before, we look at the coefficients. But this time, they are not in the same units as what we're trying to predict. They are in something called log-odds. Under certain circumstances, we can interpret them as reduced or increased likelihood of the event we're trying to predict relative to a reference category.
+As before, we look at the coefficients. But this time, they are not in the same units as what we're trying to predict. They are in something called log-odds. (To see how the link function above and the definition of odds all come together, see [here](https://en.wikipedia.org/wiki/Logistic_regression).)
 
-For example, we have coefficients for Class2nd and Class3rd, but not Class1st. The -1.02 coefficient means that the log-odds are relative to first class passengers. We also want to express our result in odds and not log-odds (that's confusing).
-
-Let's work through an example. The log-odds of dying for a 3rd-class passenger relative to a 1st-class passenger, controlling for passenger sex and age, are:
-
+Let's look at the coefficient for CHI.
 ```{r}
-# exp(1.7778)
-logistic_model %>% tidy() %>% filter(term=="CHITRUE") %>% select(estimate)
-logistic_model %>% tidy() %>% filter(term=="CHITRUE") %>% select(estimate) %>% exp()
+logistic_model %>% tidy() %>% filter(term=="CHIChicago") %>% select(estimate)
+```
+```{r}
+logistic_model %>% tidy() %>% filter(term=="CHIChicago") %>% select(estimate) %>% exp()
 ```
 
-So the odds of dying for a poor passenger were almost 6 times the odds of dying for a well-to-do passenger.
+Once we exponentiate it, we can see that the coefficient is equal to the odds ratio we calculated above. Generally, when reporting coefficients from a logistic regression, want to express our result in odds and not log-odds.
 
-Now let's look at the gap between adults and children:
+As with linear regression, we can add additional variables to the model. 
+
 ```{r}
-exp(1.0615)
+multi_logistic_model <- glm(
+    failed ~ CHI + pctBlack + pctLowInc + type,
+    data = schools,
+    family = 'binomial'
+)
+summary(multi_logistic_model)
 ```
 
-The odds of an adult dying were nearly three times that of a child dying.
+
+```{r}
+multi_logistic_model %>% tidy() %>% filter(term=="CHIChicago") %>% select(estimate) 
+```
+```{r}
+multi_logistic_model %>% tidy() %>% filter(term=="CHIChicago") %>% select(estimate) %>% exp()
+```
+
+Once we control for demographic characteristics of schools, we see that Chicago schools are *less* likely to fail to meet the benchmark. For Chicago schools, the odds of failing are only 13% of the odds for a school elsewhere in the state, controlling for demographics.
+
+Now let's look at income:
+```{r}
+multi_logistic_model %>% tidy() %>% filter(term=="pctLowInc") %>% select(estimate) 
+```
+```{r}
+multi_logistic_model %>% tidy() %>% filter(term=="pctLowInc") %>% select(estimate) %>% exp()
+```
+
+For a one percentage point increase in low income students at a school, the odds of failing to meet the benchmark increase by 9%.
 
 The R star-rating system holds true here as well - if a coefficient has at least one star, you've met the 95% confidence level requirement for statistical significance.
 
-The VERY IMPORTANT catch: You cannot treat odds like risk. They are not the same thing. You need to make sure you use the right terminology when you talk about your results. You can convert odds to risk for certain parameters in your model, but that's beyond the scope of this presentation, and comes with its own set of cavieats.
-
-
-
-
-
-
-
+VERY IMPORTANT to remember: You cannot treat odds like risk. They are not the same thing. You need to make sure you use the right terminology when you talk about your results. You can convert odds to risk for certain parameters in your model, but that's beyond the scope of this presentation, and comes with its own set of caveats.
