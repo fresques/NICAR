@@ -286,3 +286,5 @@ For a one percentage point increase in low income students at a school, the odds
 The R star-rating system holds true here as well - if a coefficient has at least one star, you've met the 95% confidence level requirement for statistical significance.
 
 VERY IMPORTANT to remember: You cannot treat odds like risk. They are not the same thing. You need to make sure you use the right terminology when you talk about your results. You can convert odds to risk for certain parameters in your model, but that's beyond the scope of this presentation, and comes with its own set of caveats.
+
+-- Adapted from materials by Olga Pierce. Thanks, Olga! --
